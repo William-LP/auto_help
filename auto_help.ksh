@@ -10,6 +10,8 @@ help() {
         echo "Parameters:"
         echo "  -h  or  --help  Prompt this help message."
         echo "  --------------------"
+		echo "  -e  or  --export  Export specific jobs to a JIL file. This parameter doesn't take any arguments."
+        echo "  --------------------"
         echo "  -f  or  --file  JIL file you want to use as an input."
         echo "  --------------------"
         echo "  -o  or  --owner Set the owner"
@@ -36,6 +38,71 @@ help() {
         echo '  +-----------------+'
         echo '\n'
         exit
+}
+
+format() {
+        if [ "x$format" = "x" ]; then
+                echo "Which format you want to export this data?"
+        echo "  1) JIL file format"
+        echo "  2) Human Readable Format"
+                        while true; do
+                                        case $format in
+                                        1|2)
+                                                        break ;;
+                                        *)
+                                                        printf "Enter [1|2] : "
+                                                        read -r format ;;
+                                        esac
+                        done
+                printf "Export file name : "
+                read -r exportfile
+        elif [ $format -eq 2 ]; then
+                # convert to Human readable format
+                echo "Convert to human readable format"
+        else
+                echo "Your export file is a JIL file named $exportfile"
+        fi
+}
+
+exportation() {
+        echo "Which jobs do you want to export ?"
+        echo "  1) From specific box"
+        echo "  2) From specific machine"
+        echo "  3) From specific status"
+        echo "  4) From specific owner"
+        while true; do
+                case $opt in
+                1)
+                        printf "Targeted Box : "
+                        read -r target
+                        format
+                        autorep -J $target -q > $exportfile
+                        format
+                        break;;
+
+                2)
+                        format
+                        # select jobs from targeted machine
+                        format
+                        break;;
+                3)
+                        format
+                        # select jobs from specific status - autorep -wj ALL | grep FA | sed 's/^ *//' | tr -s " " | cut -d " " -f -1
+                        format
+                        break;;
+
+                4)
+                        format
+                        # select jobs from specific owner
+                        format
+                        break ;;
+                *)
+                        printf "Enter [1|2|3|4] : "
+                        read -r opt ;;
+                esac
+        done
+
+
 }
 
 process() {
@@ -123,8 +190,14 @@ process() {
 main() {
         if [ $# -eq 0 ]; then
                 help
-        fi
-
+		elif [ $# -gt 1 ]; then
+			for args in $*; do
+				if [ $args = "-e" ] || [ $args = "--export" ]; then
+					echo "--export can't be used with other parameters, please type auto_help --help"
+					exit
+				fi
+			done
+		fi
         while [ $# -ne 0 ];do
                 if [ "$1" = "--owner" ] || [ "$1" = "-o" ]; then
                         if [ "$2" = "-f" ] || [ "$2" = "--file" ] || [ "$2" = "-s" ] || [ "$2" = "--status" ] || [ ! -n "$2" ]; then
@@ -162,6 +235,8 @@ main() {
                         fi
                         file=$2
                         shift
+				elif [ "$1" = "--export" ] || [ "$1" = "-e" ]; then
+					exportation
                 elif [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
                         help
                 else
