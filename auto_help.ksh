@@ -5,8 +5,6 @@ help() {
         echo '\n'
         echo "usage: auto_help -f [input file] [-o | -s] [arguments]"
         echo '\n'
-        echo "auto_help will set the updated data from the input JIL file to a new file called <INPUTFILE>.updated"
-        echo '\n'
         echo "Parameters:"
         echo "  -h  or  --help  Prompt this help message."
         echo "  --------------------"
@@ -56,12 +54,23 @@ format() {
                         done
                 printf "Export file name : "
                 read -r exportfile
-        elif [ $format -eq 2 ]; then
-                # convert to Human readable format
-                echo "Convert to human readable format"
-        else
-                echo "Your export file is a JIL file named $exportfile"
+        elif [ $format -eq 1 ] && [ $outputformat = "hr" ]; then
+                # convert to JIL format
+                echo "Converting to JIL format..."
+				while IFS=\| read -r line; do
+					autorep -j $line -q >> "$exportfile.jil"
+                done < "$exportfile"
+				rm $exportfile
+				exportfile="$exportfile.jil"
+        elif [ $format -eq 2 ] && [ $outputformat = "jil" ]; then
+                # convert to hr 
+                echo "Converting to Human Readable format..."
+				
+				# do stuff
         fi
+		if [ -e $exportfile ]; then
+			echo "$exportfile has been generated"
+		fi
 }
 
 exportation() {
@@ -76,18 +85,53 @@ exportation() {
                         printf "Targeted Box : "
                         read -r target
                         format
-                        autorep -J $target -q > $exportfile
+						echo "Processing..."
+                        autorep -J $target -q > "$exportfile"
+						outputformat="jil"
                         format
                         break;;
-
                 2)
+				        printf "Targeted Machine : "
+                        read -r machine
                         format
-                        # select jobs from targeted machine
+						echo "Step 1) Exporting all jobs..."
+						autorep -j ALL -q > "/tmp/all-autosys-jobs.$exportfile"
+                        mkdir /tmp/autosystemp
+						i=0
+						echo "Step 2) Sorting jobs out..."
+						while IFS=\| read -r "line"; do
+								if [ `echo $line | grep '/* ------' | wc -l` -eq 1 ]; then
+										i=$((i+1))
+								fi
+								echo "$line" >> "/tmp/autosystemp/file-temp-$i"
+						done < "/tmp/all-autosys-jobs.$exportfile"
+						echo "Step 3) Getting jobs from $machine..."
+						for file in /tmp/autosystemp/*; do
+								while read line; do
+										if [ `echo $line | grep "machine: $machine" | wc -l` -eq 1 ]; then
+												cat $file >> "$exportfile"
+										fi
+								done < $file
+						done
+						rm -rf /tmp/autosystemp/
+						rm "/tmp/all-autosys-jobs.$exportfile"
+						outputformat="jil"
                         format
                         break;;
                 3)
-                        format
-                        # select jobs from specific status - autorep -wj ALL | grep FA | sed 's/^ *//' | tr -s " " | cut -d " " -f -1
+                        while true; do
+                                case $statusToExport in
+                                "AC"|"FA"|"IN"|"OH"|"OI"|"QU"|"RE"|"RU"|"ST"|"SU"|"TE")
+                                        break ;;
+                                *)
+                                        printf "Collect jobs from which status [AC|FA|IN|OH|OI|QU|RE|RU|ST|SU|TE] : "
+                                        read -r statusToExport ;;
+                                 esac
+                        done
+						format
+                        echo "Processing..."
+                        autorep -wj ALL | grep $statusToExport | sed 's/^ *//' | tr -s " " | cut -d " " -f -1 >> "$exportfile"
+						outputformat="hr"
                         format
                         break;;
 
@@ -111,9 +155,6 @@ process() {
                 exit
         else
                 if [ -n "$status" ]; then
-                        if [ `whoami` != "autosys" ]; then
-                                su - autosys
-                        fi
                         case $status in
                                 "AC" )
                                         status="ACTIVATED";;
@@ -188,6 +229,10 @@ process() {
 }
 
 main() {
+        if [ `whoami` != "autosys" ]; then
+        	echo "Script needs to be run as autosys user, please use following the command : su - autosys"
+		exit
+        fi
         if [ $# -eq 0 ]; then
                 help
 		elif [ $# -gt 1 ]; then
@@ -237,6 +282,7 @@ main() {
                         shift
 				elif [ "$1" = "--export" ] || [ "$1" = "-e" ]; then
 					exportation
+					exit
                 elif [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
                         help
                 else
